@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Video, MessageCircle, PhoneOff, Mic, MicOff, VideoOff, Copy, Check, Monitor } from 'lucide-react';
+import { Video, MessageCircle, PhoneOff, Mic, MicOff, VideoOff, Copy, Check, Monitor, Paperclip } from 'lucide-react';
 import Peer from 'peerjs';
 
 const styles = {
@@ -156,6 +156,7 @@ export default function PrivateChatApp() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   
   const typingTimeoutRef = useRef(null);
+  const fileInputRef = useRef(null);
   
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -302,6 +303,14 @@ export default function PrivateChatApp() {
           if (data === '__TYPING__') {
             setIsTyping(true);
             setTimeout(() => setIsTyping(false), 3000);
+          } else if (data.type === 'file') {
+            // Received a file
+            setMessages(prev => [...prev, { 
+              file: data.file, 
+              fileName: data.fileName,
+              fileType: data.fileType,
+              sender: 'friend' 
+            }]);
           } else {
             setMessages(prev => [...prev, { text: data, sender: 'friend' }]);
           }
@@ -365,6 +374,14 @@ export default function PrivateChatApp() {
           if (data === '__TYPING__') {
             setIsTyping(true);
             setTimeout(() => setIsTyping(false), 3000);
+          } else if (data.type === 'file') {
+            // Received a file
+            setMessages(prev => [...prev, { 
+              file: data.file, 
+              fileName: data.fileName,
+              fileType: data.fileType,
+              sender: 'friend' 
+            }]);
           } else {
             setMessages(prev => [...prev, { text: data, sender: 'friend' }]);
           }
@@ -430,6 +447,49 @@ export default function PrivateChatApp() {
         clearTimeout(typingTimeoutRef.current);
       }
     }
+  };
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check file size (max 5MB for performance)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File too large. Maximum size is 5MB.');
+      return;
+    }
+
+    // Check if it's an image or video
+    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+      alert('Only images and videos are supported.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const fileData = {
+        type: 'file',
+        file: event.target.result,
+        fileName: file.name,
+        fileType: file.type
+      };
+
+      // Send to other person
+      if (connectionRef.current && isConnected) {
+        connectionRef.current.send(fileData);
+      }
+
+      // Add to your own messages
+      setMessages(prev => [...prev, { 
+        file: event.target.result,
+        fileName: file.name,
+        fileType: file.type,
+        sender: 'you' 
+      }]);
+    };
+
+    reader.readAsDataURL(file);
+    e.target.value = ''; // Reset input
   };
 
   const toggleScreenShare = async () => {
@@ -781,7 +841,7 @@ export default function PrivateChatApp() {
                       marginBottom: '8px'
                     }}
                   >
-                    {!msg.system && (
+                    {!msg.system && !msg.file && (
                       <div
                         style={{
                           ...styles.message,
@@ -789,6 +849,45 @@ export default function PrivateChatApp() {
                         }}
                       >
                         {msg.text}
+                      </div>
+                    )}
+                    {msg.file && (
+                      <div style={{
+                        display: 'inline-block',
+                        maxWidth: '70%',
+                        textAlign: msg.sender === 'you' ? 'right' : 'left'
+                      }}>
+                        {msg.fileType.startsWith('image/') && (
+                          <img 
+                            src={msg.file} 
+                            alt={msg.fileName}
+                            style={{
+                              maxWidth: '100%',
+                              maxHeight: '300px',
+                              borderRadius: '8px',
+                              cursor: 'pointer'
+                            }}
+                            onClick={() => window.open(msg.file, '_blank')}
+                          />
+                        )}
+                        {msg.fileType.startsWith('video/') && (
+                          <video 
+                            src={msg.file}
+                            controls
+                            style={{
+                              maxWidth: '100%',
+                              maxHeight: '300px',
+                              borderRadius: '8px'
+                            }}
+                          />
+                        )}
+                        <div style={{
+                          fontSize: '12px',
+                          color: '#9CA3AF',
+                          marginTop: '4px'
+                        }}>
+                          {msg.fileName}
+                        </div>
                       </div>
                     )}
                     {msg.system && <div style={{color: '#9CA3AF', fontSize: '14px', fontStyle: 'italic'}}>{msg.text}</div>}
@@ -812,6 +911,31 @@ export default function PrivateChatApp() {
             </div>
 
             <div style={styles.inputContainer}>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileSelect}
+                accept="image/*,video/*"
+                style={{display: 'none'}}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={!isConnected}
+                style={{
+                  background: '#374151',
+                  color: 'white',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  opacity: !isConnected ? 0.5 : 1,
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+                title="Send image or video"
+              >
+                <Paperclip size={20} />
+              </button>
               <input
                 type="text"
                 value={messageInput}
