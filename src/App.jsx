@@ -171,17 +171,9 @@ export default function PrivateChatApp() {
   const startLocalVideo = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-  video: {
-    width: { ideal: 1920 },
-    height: { ideal: 1080 },
-    frameRate: { ideal: 30 }
-  },
-  audio: {
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: true
-  }
-});
+        video: true, 
+        audio: true 
+      });
       localStreamRef.current = stream;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
@@ -200,6 +192,43 @@ export default function PrivateChatApp() {
     }
   };
 
+  // Sound effects
+  const playJoinSound = () => {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.3);
+  };
+
+  const playLeaveSound = () => {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.value = 400;
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.3);
+  };
+
   const generateRoomId = () => {
     return Math.random().toString(36).substring(2, 10).toUpperCase();
   };
@@ -207,21 +236,13 @@ export default function PrivateChatApp() {
   const initializePeer = (peerId) => {
     return new Promise((resolve, reject) => {
       const peer = new Peer(peerId, {
-  config: {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      }
-    ],
-    sdpSemantics: 'unified-plan'
-  },
-  serialization: 'json',
-  debug: 0
-});
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        }
+      });
 
       peer.on('open', (id) => {
         console.log('Peer initialized with ID:', id);
@@ -261,6 +282,7 @@ export default function PrivateChatApp() {
           if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = remoteStream;
           }
+          playJoinSound();
           setIsWaiting(false);
           setIsConnected(true);
           setMessages([{ text: 'Connected securely. Room will close when either person leaves.', system: true }]);
@@ -278,6 +300,7 @@ export default function PrivateChatApp() {
 
         conn.on('close', () => {
           console.log('Connection closed');
+          playLeaveSound();
           endCall();
         });
       });
@@ -315,6 +338,7 @@ export default function PrivateChatApp() {
           if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = remoteStream;
           }
+          playJoinSound();
           setIsWaiting(false);
           setIsConnected(true);
           setMessages([{ text: 'Connected securely. Room will close when either person leaves.', system: true }]);
@@ -334,6 +358,7 @@ export default function PrivateChatApp() {
 
         conn.on('close', () => {
           console.log('Connection closed');
+          playLeaveSound();
           endCall();
         });
       }, 1000);
@@ -346,6 +371,7 @@ export default function PrivateChatApp() {
   };
 
   const endCall = () => {
+    playLeaveSound();
     if (callRef.current) {
       callRef.current.close();
     }
@@ -407,6 +433,14 @@ export default function PrivateChatApp() {
     navigator.clipboard.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const goHome = () => {
+    if (isConnected || isWaiting) {
+      endCall();
+    } else {
+      window.location.href = window.location.pathname;
+    }
   };
 
   if (!isWaiting && !isConnected) {
@@ -482,8 +516,18 @@ export default function PrivateChatApp() {
   return (
     <div style={styles.container}>
       <div style={{maxWidth: '1400px', margin: '0 auto'}}>
+        {/* Logo/Header */}
+        <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '25px'}}>
+          <div 
+            onClick={goHome}
+            style={{display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer'}}
+          >
+            <Video size={32} color="#2563EB" />
+            <span style={{fontSize: '24px', fontWeight: 'bold'}}>SecureChat</span>
+          </div>
+        </div>
+
         <div style={{textAlign: 'center', marginBottom: '25px'}}>
-          <h1 style={{fontSize: '2rem', fontWeight: 'bold', marginBottom: '10px'}}>Private Chat</h1>
           {isWaiting && (
             <div style={{display: 'inline-block', background: '#1F2937', padding: '10px 20px', borderRadius: '8px'}}>
               <p style={{color: '#FBBF24', fontWeight: '600'}}>Room: {roomId}</p>
@@ -512,7 +556,7 @@ export default function PrivateChatApp() {
           )}
         </div>
 
-        <div className="chat-grid" style={{gap: '20px'}}>
+        <div style={{display: 'grid', gridTemplateColumns: '1fr', gap: '20px'}}>
           <div>
             <div style={{...styles.videoContainer, marginBottom: '20px'}}>
               <video 
@@ -545,6 +589,38 @@ export default function PrivateChatApp() {
             </div>
 
             {isConnected && (
+              <div style={{display: 'flex', justifyContent: 'center', gap: '15px'}}>
+                <button
+                  onClick={toggleMute}
+                  style={{
+                    ...styles.controlButton,
+                    background: isMuted ? '#DC2626' : '#374151'
+                  }}
+                >
+                  {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
+                </button>
+                <button
+                  onClick={toggleVideo}
+                  style={{
+                    ...styles.controlButton,
+                    background: isVideoOff ? '#DC2626' : '#374151'
+                  }}
+                >
+                  {isVideoOff ? <VideoOff size={24} /> : <Video size={24} />}
+                </button>
+                <button
+                  onClick={endCall}
+                  style={{
+                    ...styles.controlButton,
+                    background: '#DC2626'
+                  }}
+                >
+                  <PhoneOff size={24} />
+                </button>
+              </div>
+            )}
+
+            {isWaiting && (
               <div style={{display: 'flex', justifyContent: 'center', gap: '15px'}}>
                 <button
                   onClick={toggleMute}
