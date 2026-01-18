@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Video, MessageCircle, PhoneOff, Mic, MicOff, VideoOff, Copy, Check } from 'lucide-react';
+import { Video, MessageCircle, PhoneOff, Mic, MicOff, VideoOff, Copy, Check, Monitor } from 'lucide-react';
 import Peer from 'peerjs';
 
 const styles = {
@@ -152,6 +152,10 @@ export default function PrivateChatApp() {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  
+  const typingTimeoutRef = useRef(null);
   
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -295,7 +299,12 @@ export default function PrivateChatApp() {
         
         conn.on('data', (data) => {
           console.log('Received message:', data);
-          setMessages(prev => [...prev, { text: data, sender: 'friend' }]);
+          if (data === '__TYPING__') {
+            setIsTyping(true);
+            setTimeout(() => setIsTyping(false), 3000);
+          } else {
+            setMessages(prev => [...prev, { text: data, sender: 'friend' }]);
+          }
         });
 
         conn.on('close', () => {
@@ -353,7 +362,12 @@ export default function PrivateChatApp() {
 
         conn.on('data', (data) => {
           console.log('Received message:', data);
-          setMessages(prev => [...prev, { text: data, sender: 'friend' }]);
+          if (data === '__TYPING__') {
+            setIsTyping(true);
+            setTimeout(() => setIsTyping(false), 3000);
+          } else {
+            setMessages(prev => [...prev, { text: data, sender: 'friend' }]);
+          }
         });
 
         conn.on('close', () => {
@@ -408,6 +422,87 @@ export default function PrivateChatApp() {
     }
   };
 
+  const handleTyping = () => {
+    if (connectionRef.current && isConnected) {
+      connectionRef.current.send('__TYPING__');
+      
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    }
+  };
+
+  const toggleScreenShare = async () => {
+    if (isScreenSharing) {
+      // Stop screen sharing, return to camera
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 }
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+      
+      const videoTrack = stream.getVideoTracks()[0];
+      const sender = callRef.current?.peerConnection?.getSenders()?.find(s => s.track?.kind === 'video');
+      
+      if (sender) {
+        sender.replaceTrack(videoTrack);
+      }
+      
+      if (localStreamRef.current) {
+        localStreamRef.current.getVideoTracks()[0].stop();
+        localStreamRef.current.removeTrack(localStreamRef.current.getVideoTracks()[0]);
+        localStreamRef.current.addTrack(videoTrack);
+      }
+      
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
+      
+      setIsScreenSharing(false);
+    } else {
+      // Start screen sharing
+      try {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ 
+          video: true 
+        });
+        
+        const screenTrack = screenStream.getVideoTracks()[0];
+        const sender = callRef.current?.peerConnection?.getSenders()?.find(s => s.track?.kind === 'video');
+        
+        if (sender) {
+          sender.replaceTrack(screenTrack);
+        }
+        
+        if (localStreamRef.current) {
+          localStreamRef.current.getVideoTracks()[0].stop();
+          localStreamRef.current.removeTrack(localStreamRef.current.getVideoTracks()[0]);
+          localStreamRef.current.addTrack(screenTrack);
+        }
+        
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = screenStream;
+        }
+        
+        setIsScreenSharing(true);
+        
+        // Stop screen sharing when user clicks browser's stop button
+        screenTrack.onended = () => {
+          toggleScreenShare();
+        };
+      } catch (err) {
+        console.error('Error sharing screen:', err);
+        alert('Screen sharing not available or permission denied');
+      }
+    }
+  };
+
   const toggleMute = () => {
     if (localStreamRef.current) {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
@@ -448,7 +543,7 @@ export default function PrivateChatApp() {
       <div style={styles.centerContainer}>
         <div style={styles.maxWidth}>
           <div style={styles.header}>
-            <h1 style={styles.title}>Private Chat</h1>
+            <h1 style={styles.title}>👻 Ghost Chat</h1>
             <p style={styles.subtitle}>Secure 1-on-1 video & text chat</p>
             <p style={{...styles.subtitle, fontSize: '14px'}}>🔒 End-to-end encrypted • Temporary rooms</p>
           </div>
@@ -522,8 +617,8 @@ export default function PrivateChatApp() {
             onClick={goHome}
             style={{display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer'}}
           >
-            <Video size={32} color="#2563EB" />
-            <span style={{fontSize: '24px', fontWeight: 'bold'}}>SecureChat</span>
+            <span style={{fontSize: '32px'}}>👻</span>
+            <span style={{fontSize: '24px', fontWeight: 'bold'}}>Ghost Chat</span>
           </div>
         </div>
 
@@ -596,6 +691,7 @@ export default function PrivateChatApp() {
                     ...styles.controlButton,
                     background: isMuted ? '#DC2626' : '#374151'
                   }}
+                  title={isMuted ? 'Unmute' : 'Mute'}
                 >
                   {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
                 </button>
@@ -605,8 +701,19 @@ export default function PrivateChatApp() {
                     ...styles.controlButton,
                     background: isVideoOff ? '#DC2626' : '#374151'
                   }}
+                  title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
                 >
                   {isVideoOff ? <VideoOff size={24} /> : <Video size={24} />}
+                </button>
+                <button
+                  onClick={toggleScreenShare}
+                  style={{
+                    ...styles.controlButton,
+                    background: isScreenSharing ? '#2563EB' : '#374151'
+                  }}
+                  title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+                >
+                  <Monitor size={24} />
                 </button>
                 <button
                   onClick={endCall}
@@ -614,6 +721,7 @@ export default function PrivateChatApp() {
                     ...styles.controlButton,
                     background: '#DC2626'
                   }}
+                  title="End call"
                 >
                   <PhoneOff size={24} />
                 </button>
@@ -687,13 +795,30 @@ export default function PrivateChatApp() {
                   </div>
                 ))
               )}
+              {isTyping && (
+                <div style={{textAlign: 'left', marginBottom: '8px'}}>
+                  <div style={{
+                    ...styles.message,
+                    ...styles.messageFriend,
+                    display: 'inline-flex',
+                    gap: '4px'
+                  }}>
+                    <span style={{animation: 'blink 1.4s infinite', animationDelay: '0s'}}>•</span>
+                    <span style={{animation: 'blink 1.4s infinite', animationDelay: '0.2s'}}>•</span>
+                    <span style={{animation: 'blink 1.4s infinite', animationDelay: '0.4s'}}>•</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div style={styles.inputContainer}>
               <input
                 type="text"
                 value={messageInput}
-                onChange={(e) => setMessageInput(e.target.value)}
+                onChange={(e) => {
+                  setMessageInput(e.target.value);
+                  handleTyping();
+                }}
                 onKeyPress={handleKeyPress}
                 placeholder={isConnected ? "Type a message..." : "Waiting to connect..."}
                 disabled={!isConnected}
@@ -731,6 +856,13 @@ export default function PrivateChatApp() {
           <p>🔒 End-to-end encrypted • Room: {roomId} • Closes when anyone leaves</p>
         </div>
       </div>
+
+      <style>{`
+        @keyframes blink {
+          0%, 20%, 100% { opacity: 0.3; }
+          50% { opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }
