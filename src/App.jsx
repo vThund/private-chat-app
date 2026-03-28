@@ -745,7 +745,6 @@ export default function PrivateChatApp() {
                 ref={remoteVideoRef}
                 autoPlay 
                 playsInline
-                muted
                 style={styles.video}
               />
               {!isConnected && (
