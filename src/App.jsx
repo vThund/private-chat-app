@@ -240,14 +240,26 @@ export default function PrivateChatApp() {
 
   const initializePeer = (peerId) => {
     return new Promise((resolve, reject) => {
-      const peer = new Peer(peerId, {
+      const peerConfig = {
+        host: import.meta.env.VITE_PEER_HOST || 'api.peerjs.com',
+        port: import.meta.env.VITE_PEER_PORT || 443,
+        secure: import.meta.env.VITE_PEER_SECURE !== 'false',
+        path: import.meta.env.VITE_PEER_PATH || '/',
         config: {
           iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' }
           ]
         }
+      };
+
+      console.log('Initializing Peer with config:', {
+        host: peerConfig.host,
+        port: peerConfig.port,
+        secure: peerConfig.secure
       });
+
+      const peer = new Peer(peerId, peerConfig);
 
       peer.on('open', (id) => {
         console.log('Peer initialized with ID:', id);
