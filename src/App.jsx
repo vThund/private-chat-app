@@ -175,18 +175,33 @@ export default function PrivateChatApp() {
 
   const startLocalVideo = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: true, 
-        audio: true 
-      });
+      // Mobile-friendly constraints - Safari on iOS needs specific handling
+      const constraints = {
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       localStreamRef.current = stream;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+        // Force play on Safari
+        localVideoRef.current.play().catch(err => {
+          console.warn('Auto-play failed, user interaction may be needed:', err);
+        });
       }
       return stream;
     } catch (err) {
       console.error('Error accessing media devices:', err);
-      alert('Please allow camera and microphone access');
+      alert('Please allow camera and microphone access. Make sure you grant permissions on Safari.');
       return null;
     }
   };
@@ -730,6 +745,7 @@ export default function PrivateChatApp() {
                 ref={remoteVideoRef}
                 autoPlay 
                 playsInline
+                muted
                 style={styles.video}
               />
               {!isConnected && (
